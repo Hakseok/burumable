@@ -62,7 +62,10 @@
           <button class="action buy" onclick="applyAction('buy')">나라 구매</button>
           <button class="action build" onclick="applyAction('build')">건물 구매</button>
           <button class="action gold" onclick="applyAction('gold')">황금카드 이벤트</button>
-          <button class="action toll" onclick="applyAction('toll')">통행료 지급</button>
+  <div>
+    <select id="tollTarget"></select>
+    <button class="action toll" onclick="applyAction('toll')">통행료 지급</button>
+  </div>
         </div>
       </div>
     </div>
@@ -80,23 +83,38 @@
   let inputValue = '';
   let inputSign = '-'; // 기본은 차감
 
-  function renderPlayers() {
-    const container = document.getElementById('players');
-    container.innerHTML = '';
-    players.forEach((p, i) => {
-      const div = document.createElement('div');
-      div.className = 'player' + (current === i ? ' active' : '');
-      div.innerHTML = `<h3>${p.name}</h3><p>₩${p.balance.toLocaleString()}</p><p>무인도: ${p.prison}</p>
-        <button onclick="removePlayer(${i})">삭제</button>`;
-      div.onclick = () => { 
-        current = i; 
-        renderPlayers(); 
-        document.getElementById('currentPlayer').innerText = '현재 차례: ' + p.name; 
-      };
-      container.appendChild(div);
+function renderPlayers() {
+  const container = document.getElementById('players');
+  container.innerHTML = '';
+  players.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'player' + (current === i ? ' active' : '');
+    div.innerHTML = `<h3>${p.name}</h3><p>₩${p.balance.toLocaleString()}</p><p>무인도: ${p.prison}</p>
+      <button onclick="removePlayer(${i})">삭제</button>`;
+    div.onclick = () => { 
+      current = i; 
+      renderPlayers(); 
+      document.getElementById('currentPlayer').innerText = '현재 차례: ' + p.name; 
+    };
+    container.appendChild(div);
+  });
+
+  // 콤보박스 갱신
+  const select = document.getElementById('tollTarget');
+  if (select) {
+    select.innerHTML = '';
+    players.forEach((p,i) => {
+      if (i !== current) {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.text = p.name;
+        select.appendChild(opt);
+      }
     });
-    localStorage.setItem('players', JSON.stringify(players));
   }
+
+  localStorage.setItem('players', JSON.stringify(players));
+}
 
   function renderKeypad() {
     const keys = ['1','2','3','4','5','6','7','8','9','0','00','삭제','+','-'];
@@ -150,16 +168,15 @@
         logAction("황금카드(-)", "-" + amount);
       }
     }
-    if (type === 'toll') {
-      let options = players.map((p,i)=> i!==current ? `${i}:${p.name}` : null).filter(Boolean).join("\n");
-      const targetIndex = prompt("통행료 받을 플레이어 선택:\n" + options);
-      const receiver = players[targetIndex];
-      if (receiver) {
-        receiver.balance += amount;
-        players[current].balance -= amount;
-        logAction("통행료", "-" + amount + " → " + receiver.name);
-      }
+  if (type === 'toll') {
+    const targetIndex = document.getElementById('tollTarget').value;
+    const receiver = players[targetIndex];
+    if (receiver) {
+      receiver.balance += amount;
+      players[current].balance -= amount;
+      logAction("통행료", "-" + amount + " → " + receiver.name);
     }
+  }
 
     inputValue = '';
     inputSign = '-'; // 기본으로 되돌림
