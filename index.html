@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>부르마블 자산 관리</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #eef5ff; margin: 0; }
+    header { background: #0078d7; color: white; padding: 15px; font-size: 24px; font-weight: bold; text-align: center; }
+    .container { display: flex; }
+    .left { width: 75%; padding: 10px; }
+    .right { width: 25%; background: #fff; border-left: 2px solid #ccc; padding: 10px; overflow-y: auto; height: calc(100vh - 60px); }
+    .players { display: flex; flex-wrap: wrap; margin: 10px; }
+    .player { background: white; border: 2px solid #ccc; border-radius: 10px; margin: 5px; padding: 10px; width: 160px; cursor: pointer; }
+    .player.active { border-color: #0078d7; box-shadow: 0 0 10px #0078d7; }
+    .top-controls { margin: 10px; }
+    .turn-area { display: flex; align-items: center; margin: 10px; }
+    .turn { background: #6f42c1; color: white; margin-left: 10px; }
+    .reset { background: #343a40; color: white; }
+    .add { background: #20c997; color: white; }
+    .input-area { display: flex; margin: 10px; }
+    .keypad { flex: 1; display: grid; grid-template-columns: repeat(3, 80px); gap: 5px; justify-content: center; }
+    .keypad button { font-size: 20px; padding: 10px; border-radius: 8px; border: none; background: #f0f0f0; cursor: pointer; }
+    .actions { flex: 1; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-left: 20px; }
+    .action { padding: 10px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+    .salary { background: #28a745; color: white; }
+    .buy { background: #007bff; color: white; }
+    .build { background: #17a2b8; color: white; }
+    .gold { background: #ffc107; color: black; }
+    .toll { background: #dc3545; color: white; }
+    #display { font-size:20px; margin:10px; font-weight:bold; text-align:center; }
+    .log-entry { border-bottom: 1px solid #ddd; padding: 5px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <header>부르마블 자산 관리</header>
+  <div class="container">
+    <!-- 좌측 영역 -->
+    <div class="left">
+      <!-- 초기화 / 플레이어 추가 버튼 -->
+      <div class="top-controls">
+        <button class="action reset" id="resetBtn">초기화</button>
+        <button id="addBtn" class="action add">플레이어 추가</button>
+      </div>
+
+      <!-- 플레이어 목록 -->
+      <div class="players" id="players"></div>
+
+      <!-- 현재 차례 + 다음 턴 버튼 -->
+      <div class="turn-area">
+        <div id="currentPlayer" style="font-weight:bold;">현재 차례: 없음</div>
+        <button class="action turn" onclick="nextTurn()">다음 턴</button>
+      </div>
+
+      <!-- 현재 입력 금액 -->
+      <div id="display">현재 입력 금액: ₩0 (-)</div>
+
+      <!-- 숫자패드 + 액션 버튼 나란히 -->
+      <div class="input-area">
+        <div class="keypad" id="keypad"></div>
+        <div class="actions">
+          <button class="action salary" onclick="applyAction('salary')">월급 지급</button>
+          <button class="action buy" onclick="applyAction('buy')">나라 구매</button>
+          <button class="action build" onclick="applyAction('build')">건물 구매</button>
+          <button class="action gold" onclick="applyAction('gold')">황금카드 이벤트</button>
+          <button class="action toll" onclick="applyAction('toll')">통행료 지급</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 우측 영역 -->
+    <div class="right">
+      <h3>게임 이력</h3>
+      <div id="log"></div>
+    </div>
+  </div>
+
+<script>
+  let players = JSON.parse(localStorage.getItem('players')) || [];
+  let current = null;
+  let inputValue = '';
+  let inputSign = '-'; // 기본은 차감
+
+  function renderPlayers() {
+    const container = document.getElementById('players');
+    container.innerHTML = '';
+    players.forEach((p, i) => {
+      const div = document.createElement('div');
+      div.className = 'player' + (current === i ? ' active' : '');
+      div.innerHTML = `<h3>${p.name}</h3><p>₩${p.balance.toLocaleString()}</p><p>무인도: ${p.prison}</p>
+        <button onclick="removePlayer(${i})">삭제</button>`;
+      div.onclick = () => { 
+        current = i; 
+        renderPlayers(); 
+        document.getElementById('currentPlayer').innerText = '현재 차례: ' + p.name; 
+      };
+      container.appendChild(div);
+    });
+    localStorage.setItem('players', JSON.stringify(players));
+  }
+
+  function renderKeypad() {
+    const keys = ['1','2','3','4','5','6','7','8','9','0','00','삭제','+','-'];
+    const pad = document.getElementById('keypad');
+    pad.innerHTML = '';
+    keys.forEach(k => {
+      const btn = document.createElement('button');
+      btn.innerText = k;
+      btn.onclick = () => handleKey(k);
+      pad.appendChild(btn);
+    });
+    updateDisplay();
+  }
+
+  function handleKey(k) {
+    if (k === '삭제') inputValue = '';
+    else if (k === '+' || k === '-') {
+      inputSign = k;
+    } else {
+      inputValue += k;
+    }
+    updateDisplay();
+  }
+
+  function updateDisplay() {
+    document.getElementById('display').innerText = 
+      "현재 입력 금액: ₩" + (inputValue ? parseInt(inputValue,10).toLocaleString() : "0") + " (" + inputSign + ")";
+  }
+
+  function applyAction(type) {
+    if (current === null) return alert('플레이어를 선택하세요!');
+    let amount = parseInt(inputValue, 10) || 0;
+    if (type === 'salary') amount = 200000;
+    if (amount === 0 && type !== 'salary') return alert('금액을 입력하세요!');
+
+    if (type === 'buy' || type === 'build') {
+      players[current].balance -= amount;
+      logAction(type, "-" + amount);
+    }
+    if (type === 'salary') {
+      players[current].balance += amount;
+      logAction(type, "+" + amount);
+    }
+    if (type === 'gold') {
+      // 황금카드: 부호에 따라 증감
+      if (inputSign === '+') {
+        players[current].balance += amount;
+        logAction("황금카드(+)", "+" + amount);
+      } else {
+        players[current].balance -= amount;
+        logAction("황금카드(-)", "-" + amount);
+      }
+    }
+    if (type === 'toll') {
+      let options = players.map((p,i)=> i!==current ? `${i}:${p.name}` : null).filter(Boolean).join("\n");
+      const targetIndex = prompt("통행료 받을 플레이어 선택:\n" + options);
+      const receiver = players[targetIndex];
+      if (receiver) {
+        receiver.balance += amount;
+        players[current].balance -= amount;
+        logAction("통행료", "-" + amount + " → " + receiver.name);
+      }
+    }
+
+    inputValue = '';
+    inputSign = '-'; // 기본으로 되돌림
+    updateDisplay();
+    renderPlayers();
+  }
+
+  function logAction(type, detail) {
+    const log = document.getElementById('log');
+    const name = players[current].name;
+    const entry = document.createElement('div');
+    entry.className = 'log-entry';
+    entry.innerText = `${name}: ${detail} (${type})`;
+    log.prepend(entry);
+  }
+
+  function nextTurn() {
+    if (players.length === 0) return;
+    current = (current + 1) % players.length;
+    if (players[current].prison > 0) {
+      players[current].prison--;
+      logAction('무인도', "턴 스킵");
+      nextTurn();
+    } else {
+      document.getElementById('currentPlayer').innerText = '현재 차례: ' + players[current].name;
+    }
+    renderPlayers();
+  }
+
+  function resetGame() {
+    players = [];
+    current = null;
+    localStorage.removeItem('players');
+    renderPlayers();
+    document.getElementById('log').innerHTML = '';
+    document.getElementById('currentPlayer').innerText = '현재 차례: 없음';
+    inputValue = '';
+    inputSign = '-';
+    updateDisplay();
+  }
+
+  function addPlayer() {
+    const name = prompt("플레이어 이름을 입력하세요:");
+    if (!name) return;
+    players.push({ name: name, balance: 1500000, prison: 0 });
+    if (current === null) current = 0;
+    renderPlayers();
+  }
+
+  function removePlayer(i) {
+    players.splice(i,1);
+    if (current >= players.length) current = 0;
+    renderPlayers();
+  }
+
+  // 버튼 이벤트 연결
+  document.getElementById("addBtn").addEventListener("click", addPlayer);
+  document.getElementById("resetBtn").addEventListener("click", resetGame);
+
+  // 초기 렌더링
+  renderPlayers();
+  renderKeypad();
+  updateDisplay();
+</script>
+
+</body>
+</html>
